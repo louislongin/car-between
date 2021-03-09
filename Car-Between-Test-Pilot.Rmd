@@ -1,0 +1,224 @@
+---
+title: "Car-Between-Test-Pilot"
+author: "LLongin"
+date: "08/03/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(dplyr)
+library(data.table)
+library(stringr)
+library(moments)
+library(ggplot2)
+library(lme4)
+theme_set(theme_minimal())
+```
+
+# Importing Data & Formatting
+
+Car Between-Subject Data: Pilot with 10 participants
+
+Tidy Data
+```{r}
+#Reads data from csv file
+car_data <- read.csv("data/test.csv")
+car_wide <- data.frame(car_data)
+
+car_wide = car_wide[-c(1,2),] #remove first two header rows
+
+#select relevant columns
+car_wide = car_wide %>% select(Prolific_ID, FL_13_DO, Age, Education, Gender, Attention1, Attention2,
+         L_neg_H_BP_4, L_neg_AI_BP_4, L_neg_P_BP_4, L_neg_H_R_4, L_neg_AI_R_4, L_neg_P_R_4, L_neg_Inf_4, L_neg_Effort_4,
+         S_neg_H_BP_4, S_neg_AI_BP_4, S_neg_P_BP_4, S_neg_H_R_4, S_neg_AI_R_4, S_neg_P_R_4, S_neg_Inf_4, S_neg_Effort_4,
+         C_neg_H_BP_4, C_neg_P_BP_4, C_neg_H_R_4, C_neg_P_R_4
+         )
+
+#Rename columns of car_wide with namekey vector
+namekey <- c(Prolific_ID="Prolific_ID", FL_13_DO="Condition", Age="Age", 
+             Gender="Gender", Education="Education", 
+             Attention1="Attention1", Attention2="Attention2",
+             L_neg_H_BP_4="L_neg_H_BP", L_neg_AI_BP_4="L_neg_AI_BP", L_neg_P_BP_4="L_neg_P_BP",
+             L_neg_H_R_4="L_neg_H_R", L_neg_AI_R_4="L_neg_AI_R", L_neg_P_R_4="L_neg_P_R",
+             L_neg_Inf_4="L_neg_Inf", L_neg_Effort_4="L_neg_Effort",
+             S_neg_H_BP_4="S_neg_H_BP", S_neg_AI_BP_4="S_neg_AI_BP", S_neg_P_BP_4="S_neg_P_BP",
+             S_neg_H_R_4="S_neg_H_R", S_neg_AI_R_4="S_neg_AI_R", S_neg_P_R_4="S_neg_P_R",
+             S_neg_Inf_4="S_neg_Inf", S_neg_Effort_4="S_neg_Effort",
+             C_neg_H_BP_4="C_neg_H_BP", C_neg_P_BP_4="C_neg_P_BP", 
+             C_neg_H_R_4="C_neg_H_R", C_neg_P_R_4="C_neg_P_R")
+
+names(car_wide) <- namekey[names(car_wide)]
+
+#Combine between-subject responses to one column
+#creates new column by joining linguistic, sensory data per condition
+car_wide$AI_Informativity <- as.numeric(paste(car_wide$L_neg_Inf, car_wide$S_neg_Inf))
+car_wide$AI_Effort <- as.numeric(paste(car_wide$L_neg_Effort, car_wide$S_neg_Effort))
+car_wide$Blame_Driver <- as.numeric(paste(car_wide$L_neg_H_BP, car_wide$S_neg_H_BP, car_wide$C_neg_H_BP))
+car_wide$Blame_Pedestrian <- as.numeric(paste(car_wide$L_neg_P_BP, car_wide$S_neg_P_BP, car_wide$C_neg_P_BP))
+car_wide$Blame_AI <- as.numeric(paste(car_wide$L_neg_AI_BP, car_wide$S_neg_AI_BP))
+car_wide$Responsibility_Driver <- as.numeric(paste(car_wide$L_neg_H_R, car_wide$S_neg_H_R, car_wide$C_neg_H_R))
+car_wide$Responsibility_Pedestrian <- as.numeric(paste(car_wide$L_neg_P_R, car_wide$S_neg_P_R, car_wide$C_neg_P_R))
+car_wide$Responsibility_AI <- as.numeric(paste(car_wide$L_neg_AI_R, car_wide$S_neg_AI_R))
+
+#eliminate individual columns and only keep combined columns
+relevant_columns = names(car_wide)[-c(8:27)]
+car_wide <- subset(car_wide, select = relevant_columns)
+measured <- names(car_wide)[-c(1:7)]
+
+#Transform wide to long
+car_long <- melt(setDT(car_wide), id.vars = c("Prolific_ID", "Condition"), measure.vars = measured, value.name = "Response", variable.name = "Question")
+
+```
+
+Descriptive Stats - Stats
+```{r}
+
+group_by(car_long, Condition, Question) %>%
+  summarise(
+    #count = n(),
+    mean = mean(Response, na.rm = TRUE),
+    median = median(Response, na.rm = TRUE),
+    #range = range(Response, na.rm = TRUE),
+    sd = sd(Response, na.rm = TRUE),
+    skewness = skewness(Response, na.rm = TRUE),
+    kurtosis = kurtosis(Response, na.rm = TRUE)
+  )
+
+```
+
+
+Descriptive Stats - Visualisation
+```{r}
+
+#boxplot 
+ggboxplot(car_long, facet.by = "Question",
+          x = "Condition", y = "Response", 
+          color = "Condition", palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+          order = c("LingNeg", "SensNeg", "Control-"),
+          ylab = "Blame Driver", xlab = FALSE, ylim = c(0, 100),
+          bxp.errorbar=TRUE, font.label = list(size=5))
+
+
+
+#testing other ways to plot multiple plots with a plot list in a for loop below
+
+# Blame_Driver <- ggboxplot(car_long[which(car_long$Question == "Blame_Driver")],
+#                           x = "Condition", y = "Response", 
+#                           color = "Condition", palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+#                           order = c("LingNeg", "SensNeg", "Control-"),
+#                           ylab = "Blame Driver", xlab = "Conditions", ylim = c(0, 100))
+# 
+# plot_list <- list() 
+# for (i in c(unique(car_long$Question))){
+#   plot <- ggboxplot(car_long[which(car_long$Question == unique(car_long$Question)[i])],
+#                           x = "Condition", y = "Response", 
+#                           color = "Condition", palette = c("#00AFBB", "#E7B800", "#FC4E07"),
+#                           order = c("LingNeg", "SensNeg", "Control-"),
+#                           ylab = unique(car_long$Question)[i], xlab = FALSE, 
+#                           ylim = c(0, 100), bxp.errorbar=TRUE, font.label = list(size=1))
+#   plot_list[[i]] <- plot
+# }
+# 
+# ggarrange(plotlist=plot_list, ncol = 3, nrow = 3, common.legend = TRUE, font.label = list(size=1))
+
+# ggarrange(Blame_Driver, Blame_AI, Blame_Pedestrian, 
+#           Responsibility_Driver, Responsibility_Pedestrian, Responsibility_AI, 
+#           AI_Effort, AI_Informativity,
+#           ncol = 3, nrow = 3)  
+
+```
+
+Inferential Stats - Mixed Linear Model
+```{r}
+
+mixed.lmer <- lmer(Response ~ Condition * Question + (1|Prolific_ID), data = car_long)
+summary(mixed.lmer)
+
+```
+
+Inferential Stats - Anova (Blame Driver)
+```{r}
+
+data_blame_driver <- car_long[which(car_long$Question == "Blame_Driver")]
+
+# Compute the analysis of variance
+res.aov <- aov(Response ~ Condition, data = data_blame_driver)
+# Summary of the analysis
+summary(res.aov)
+
+plot(res.aov, 1) # 1. Normality
+plot(res.aov, 2) # 2. Normality 
+
+#ANOVA test with no assumption of equal variances
+oneway.test(Response ~ Condition, data = data_blame_driver)
+
+#Non-parametric alternative to one-way ANOVA test
+kruskal.test(Response ~ Condition, data = data_blame_driver)
+
+```
+
+Inferential Stats - Anova (Blame AI)
+```{r}
+data_blame_ai <- car_long[which(car_long$Question == "Blame_AI")]
+
+# Compute the analysis of variance
+res.aov <- aov(Response ~ Condition, data = data_blame_ai)
+# Summary of the analysis
+summary(res.aov)
+
+plot(res.aov, 1) # 1. Normality
+plot(res.aov, 2) # 2. Normality 
+
+#ANOVA test with no assumption of equal variances
+oneway.test(Response ~ Condition, data = data_blame_ai)
+
+#Non-parametric alternative to one-way ANOVA test
+kruskal.test(Response ~ Condition, data = data_blame_ai)
+
+```
+
+Inferential Stats - Anova (Responsibility Driver)
+```{r}
+data_responsibility_driver <- car_long[which(car_long$Question == "Responsibility_Driver")]
+
+# Compute the analysis of variance
+res.aov <- aov(Response ~ Condition, data = data_responsibility_driver)
+# Summary of the analysis
+summary(res.aov)
+
+plot(res.aov, 1) # 1. Normality
+plot(res.aov, 2) # 2. Normality 
+
+#ANOVA test with no assumption of equal variances
+oneway.test(Response ~ Condition, data = data_responsibility_driver)
+
+#Non-parametric alternative to one-way ANOVA test
+kruskal.test(Response ~ Condition, data = data_responsibility_driver)
+
+```
+
+Inferential Stats - Anova (Responsibility Driver)
+```{r}
+data_responsibility_ai <- car_long[which(car_long$Question == "Responsibility_AI")]
+
+# Compute the analysis of variance
+res.aov <- aov(Response ~ Condition, data = data_responsibility_ai)
+# Summary of the analysis
+summary(res.aov)
+
+plot(res.aov, 1) # 1. Normality
+plot(res.aov, 2) # 2. Normality 
+
+#ANOVA test with no assumption of equal variances
+oneway.test(Response ~ Condition, data = data_responsibility_ai)
+
+#Non-parametric alternative to one-way ANOVA test
+kruskal.test(Response ~ Condition, data = data_responsibility_ai)
+
+```
